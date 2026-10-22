@@ -13,7 +13,7 @@ A Discord bot built with TypeScript, discord.js, MongoDB, and **Components V2**.
 - Private support channels with staff access and a confirmation before deletion.
 - Components V2 containers, text displays, and buttons. Bot replies suppress mentions.
 - Manual custom emoji mapping through `{emoji:name}` placeholders, with Unicode defaults.
-- Live permission checks, role hierarchy checks, per-user interaction limits, and private command responses.
+- Live permission checks, role hierarchy checks, shared per-user action limits, and private slash-command responses.
 
 ## Requirements
 
@@ -30,7 +30,7 @@ cp .env.example .env
 
 Fill in `.env` with the bot token, application ID, and MongoDB URI. Set `DISCORD_GUILD_ID` to a test server for immediate command registration; omit it when deploying global commands. Global command updates can take time to propagate. Remove old guild commands separately when switching to global registration to avoid duplicates. Never commit `.env` or tokens.
 
-Enable **Server Members Intent** in the Developer Portal. Basic spam protection does not need Message Content Intent. For content-based automod, enable **Message Content Intent** in the portal and set `MESSAGE_CONTENT_ENABLED=true` in `.env`, then restart. The gateway also requests Guild Moderation events for audit protection.
+Enable **Server Members Intent** in the Developer Portal. Basic spam protection does not need Message Content Intent. For prefix commands and content-based automod, enable **Message Content Intent** in the portal and set `MESSAGE_CONTENT_ENABLED=true` in `.env`, then restart. The gateway also requests Guild Moderation events for audit protection.
 
 Install the bot with the `bot` and `applications.commands` scopes. Grant these permissions where the corresponding features are used:
 
@@ -84,6 +84,26 @@ A crash during ticket creation can leave a `creating` reservation, or an open re
 
 For the expanded security, automod, verification, moderation, logging, and utility commands, see the [full feature guide](docs/aerox-reference.md). Channel operations need both Manage Channels and Manage Roles and preserve original @everyone settings for restoration.
 
+## Prefix and hybrid commands
+
+Every slash command also works with a server prefix or a bot mention when `MESSAGE_CONTENT_ENABLED=true` and **Message Content Intent** is enabled in the Developer Portal. Restart after enabling it. Prefix support is off by default; slash commands remain available.
+
+The default prefix is `!`. Server managers can view or change it with `/prefix [value]` or `!prefix ?`. Prefixes are stored per server in MongoDB and accept 1–8 letters, numbers, or the punctuation listed by `/prefix`.
+
+```text
+!help
+!ping
+!ban @member "Repeated spam"
+!timeout --user @member --minutes 10 --reason "Repeated spam"
+!security configure --enabled true --spam_limit 5
+!channel --operation lock --all true
+@Kuroo serverinfo
+```
+
+Use the slash command's option order for positional arguments, or `--name value` for named arguments. Put positional arguments before named options. Quote text containing spaces; booleans accept `true` or `false`. User, role, and channel arguments accept matching mentions or IDs. Omitting a subcommand selects `status` where available. Arguments, choices, limits, current permissions, role hierarchy, and action cooldowns are shared with slash commands. Run `npm run deploy` after this update to register `/prefix`.
+
+Prefix invocations are visible in the source channel. Ordinary responses and channel confirmation buttons are public. Moderation history, trust lists, delegated owners, reports, and automod history/filter results are sent by DM; if DMs are closed, the command stops without exposing results. Use `/report` for a private submission because a prefix report's input is public. Slash replies and verification challenges remain private. Prefix commands do not bypass automod or flood protection.
+
 ## Custom emojis
 
 Edit `config/emojis.json` (or set `EMOJI_CONFIG_PATH`) and restart:
@@ -100,7 +120,7 @@ Edit `config/emojis.json` (or set `EMOJI_CONFIG_PATH`) and restart:
 }
 ```
 
-Use actual emoji IDs from a server accessible to Kuroo. `{emoji:shield}` and `{emoji:success}` in bot UI strings are replaced at render time. Unknown placeholders remain visible to make missing configuration discoverable. This mapping changes Kuroo’s UI; it does not rewrite member messages. Invalid configuration stops startup. The configured emoji appears in Components V2 text; action buttons use text labels.
+Use actual emoji IDs from a server accessible to Kuroo. `{emoji:shield}` and `{emoji:success}` in bot UI strings are replaced at render time. Unknown placeholders remain visible to make missing configuration discoverable. This mapping changes Kuroo’s UI; it does not rewrite member messages. Invalid configuration stops startup. The 32-key catalogue covers panels, help categories, and action buttons. Buttons use the same configured custom emoji (static or animated) alongside readable labels. Partial configuration files inherit Unicode defaults for omitted keys. Each value must be one Unicode emoji or valid Discord custom emoji markup; invalid entries stop startup.
 
 ## Validation and operations
 
@@ -111,7 +131,7 @@ npm run build
 npm audit --omit=dev
 ```
 
-Tests cover permission boundaries, emoji rendering, Components V2 payloads, command registration schemas, MongoDB indexes, concurrent ticket reservations, failed moderation persistence, and ticket cleanup. Database tests use an ephemeral real MongoDB process through `mongodb-memory-server` and may download its binary on first run. No Discord token is needed for tests. Live Discord gateway, permission behavior, and rendering still require a test server.
+Tests cover prefix parsing and persistence, shared permissions and cooldowns, private prefix delivery, emoji buttons and rendering, Components V2 payloads, command registration schemas, MongoDB indexes, concurrent ticket reservations, failed moderation persistence, and ticket cleanup. Database tests use an ephemeral real MongoDB process through `mongodb-memory-server` and may download its binary on first run. No Discord token is needed for tests. Live Discord gateway, permission behavior, and rendering still require a test server.
 
 Use a process supervisor for production and keep secrets in a secret manager or protected environment file. Back up MongoDB and restrict its network access. The bot logs only limited error metadata. Optional audit protection can contain untrusted administrators below Kuroo and perform partial restoration; see the recovery limits in the feature guide. It does not guarantee prevention of server destruction, restore deleted message history, classify image content itself, or coordinate rate limits across processes. Discord timeouts cannot affect administrators or members above Kuroo. Tune thresholds to your community; legitimate bursts can trigger protection.
 

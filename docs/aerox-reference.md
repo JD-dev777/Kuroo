@@ -1,6 +1,6 @@
 # AeroX reference and Kuroo coverage
 
-Reference: [itsfizys/AeroX-Security-Bot](https://github.com/itsfizys/AeroX-Security-Bot), commit `115b8dd40f811a49383dce56e429e0e042187267` (inspected October 22, 2026). The reference’s README and command/event organization informed this expansion. Kuroo implements these concepts independently in TypeScript with Mongoose and slash commands. No reference source code, LMDB database files, configuration, identities, or emoji IDs were imported.
+Reference: [itsfizys/AeroX-Security-Bot](https://github.com/itsfizys/AeroX-Security-Bot), commit `115b8dd40f811a49383dce56e429e0e042187267` (inspected October 22, 2026). The reference’s README and command/event organization informed this expansion. Kuroo implements these concepts independently in TypeScript with Mongoose and shared slash/prefix command handlers. No reference source code, LMDB database files, configuration, identities, or emoji IDs were imported.
 
 ## Feature mapping
 

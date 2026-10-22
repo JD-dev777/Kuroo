@@ -6,6 +6,8 @@ const moderation = (name: string, description: string, permission: bigint) => ne
   .addUserOption(o => o.setName('user').setDescription('Member to moderate').setRequired(true))
   .addStringOption(o => o.setName('reason').setDescription('Audit reason').setMaxLength(400).setRequired(true));
 export const commands = [
+  new SlashCommandBuilder().setName('prefix').setDescription('View or change the server command prefix').setContexts(0).setDefaultMemberPermissions(P.ManageGuild)
+    .addStringOption(o => o.setName('value').setDescription('New prefix (1–8 letters, numbers or ! ? . $ % & * + = : ; , _ ~ -)').setMinLength(1).setMaxLength(8)),
   ...featureCommands,
   ...extraModerationCommands,
   new SlashCommandBuilder().setName('help').setDescription('Kuroo commands and security information').setContexts(0),

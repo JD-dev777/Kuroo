@@ -6,6 +6,7 @@ import mongoose from 'mongoose';
 import { readConfig } from './config.js';
 import { loadEmojis } from './ui.js';
 import { allModels } from './models.js';
+import { installPrefixCommands } from './prefix.js';
 import { installInteractions } from './interactions.js';
 import { installSecurity } from './security.js';
 import { reportError } from './audit.js';
@@ -21,6 +22,7 @@ const client = new Client({
   allowedMentions: { parse: [] },
 });
 installInteractions(client);
+if (config.MESSAGE_CONTENT_ENABLED === 'true') installPrefixCommands(client);
 installLogging(client);
 const stopSecurity = installSecurity(client);
 const stopAntinuke = installAntinuke(client);
