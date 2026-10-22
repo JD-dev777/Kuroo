@@ -1,3 +1,5 @@
+import { assignJoinRole } from './verification.js';
+import { recordedAction } from './actions.js';
 import { Client, Events, escapeMarkdown, Guild, GuildMember, Message, PermissionFlagsBits as P } from 'discord.js';
 import { getSettings, ModCase } from './models.js';
 import { SlidingWindow } from './security-policy.js';
@@ -35,28 +37,49 @@ async function autoTimeout(member: GuildMember, reason: string, guild: Guild) {
   record.outcome = 'succeeded'; await record.save();
   await safeAudit(guild, '{emoji:shield} Automatic timeout', `<@${fresh.id}> · 10 minutes\n${escapeMarkdown(reason)}\nCase: \`${record.id}\``);
 }
-async function onJoin(member: GuildMember) {
-  if (member.user.bot) return;
+export async function protectJoin(member: GuildMember) {
   const config = await settingsFor(member.guild.id);
-  if (!config.securityEnabled) return;
-  const now = Date.now();
-  const count = joins.hit(member.guild.id, now, config.joinWindowSeconds * 1000);
-  if (count >= config.joinLimit) {
-    const alreadyActive = (raidUntil.get(member.guild.id) ?? 0) > now;
-    raidUntil.set(member.guild.id, now + 60_000);
-    if (!alreadyActive) await safeAudit(member.guild, '{emoji:warning} Join surge detected', `${count} joins in ${config.joinWindowSeconds} seconds. New accounts joining during the next 60 seconds will receive a 10 minute timeout.\nMinimum account age: ${config.minAccountAgeHours} hours.`);
+  let reason: string | undefined;
+  if (config.securityEnabled && !config.raidTrustedUsers.includes(member.id)) {
+    const now = Date.now();
+    if (member.user.bot) {
+      if (config.raid?.botFilter) reason = 'Untrusted bot account joined';
+    } else {
+      const young = now - member.user.createdTimestamp < config.minAccountAgeHours * 3_600_000;
+      if (config.raid?.accountAgeFilter && young) reason = 'Account below configured minimum age';
+      const count = joins.hit(member.guild.id, now, config.joinWindowSeconds * 1000);
+      if (count >= config.joinLimit) {
+        const alreadyActive = (raidUntil.get(member.guild.id) ?? 0) > now;
+        raidUntil.set(member.guild.id, now + 60_000);
+        if (!alreadyActive) await safeAudit(member.guild, '{emoji:warning} Join surge detected', `${count} joins in ${config.joinWindowSeconds} seconds. Young accounts joining during the next 60 seconds receive the configured raid response.`);
+      }
+      if (young && (raidUntil.get(member.guild.id) ?? 0) > now) reason ??= 'Young account joined during an active join surge';
+    }
   }
-  if ((raidUntil.get(member.guild.id) ?? 0) <= now || now - member.user.createdTimestamp >= config.minAccountAgeHours * 3_600_000) return;
-  const key = `${member.guild.id}:${member.id}`;
-  if (busy.has(key)) return;
-  busy.add(key);
-  try { await autoTimeout(member, 'Young account joined during an active join surge', member.guild); }
-  finally { busy.delete(key); }
+  if (reason) {
+    const key = `${member.guild.id}:${member.id}`;
+    if (busy.has(key)) return;
+    busy.add(key);
+    try {
+      const action = config.raid?.action ?? 'timeout';
+      if (action === 'timeout' && !member.user.bot) await autoTimeout(member, reason, member.guild);
+      else {
+        const fresh = await member.guild.members.fetch({ user: member.id, force: true });
+        if (fresh.id === member.guild.ownerId || fresh.permissions.has(P.ManageGuild) || fresh.permissions.has(P.ModerateMembers)) return;
+        const effective = action === 'ban' ? 'ban' : 'kick';
+        if (effective === 'ban' ? !fresh.bannable : !fresh.kickable) return;
+        const me = await member.guild.members.fetchMe();
+        await recordedAction(member.guild, me.id, member.id, `antiraid-${effective}`, reason, () => effective === 'ban' ? fresh.ban({ reason }) : fresh.kick(reason));
+      }
+    } finally { busy.delete(key); }
+    return;
+  }
+  await assignJoinRole(member);
 }
 async function onMessage(message: Message) {
   if (!message.inGuild() || message.author.bot || message.webhookId || !message.member) return;
   const config = await settingsFor(message.guildId);
-  if (!config.securityEnabled) return;
+  if (!config.securityEnabled || config.raidTrustedUsers.includes(message.author.id)) return;
   const key = `${message.guildId}:${message.author.id}`;
   const count = messages.hit(key, Date.now(), 5_000);
   if (count < config.spamLimit || busy.has(key)) return;
@@ -65,7 +88,7 @@ async function onMessage(message: Message) {
   finally { busy.delete(key); }
 }
 export function installSecurity(client: Client) {
-  client.on(Events.GuildMemberAdd, member => { void onJoin(member).catch(error => reportError('Join protection failed', error)); });
+  client.on(Events.GuildMemberAdd, member => { void protectJoin(member).catch(error => reportError('Join protection failed', error)); });
   client.on(Events.MessageCreate, message => { void onMessage(message).catch(error => reportError('Message protection failed', error)); });
   const cleanup = setInterval(() => {
     const now = Date.now();

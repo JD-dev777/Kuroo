@@ -1,9 +1,12 @@
 # Kuroo
 
-A Discord bot built with TypeScript, discord.js, MongoDB, and **Components V2**. Kuroo focuses on server security, moderation, and private support tickets.
+A Discord bot built with TypeScript, discord.js, MongoDB, and **Components V2**. Kuroo includes audit protection, raid defense, automod, verification, moderation, utilities, and private support tickets. See the [AeroX reference and feature guide](docs/aerox-reference.md) for command mappings and behavior.
 
 ## Features
 
+- Audit-log protection with owner-managed trust lists, alert/ban modes, and optional partial recovery.
+- Message filters with persistent strike escalation and user/role/channel exemptions.
+- PNG captcha verification, persistent channel access snapshots, and safe automatic roles.
 - Join surge detection and message flood protection with configurable thresholds and automatic 10 minute timeouts.
 - Ban, kick, timeout, warnings, recent message cleanup, and moderation history.
 - MongoDB settings, moderation records, and ticket reservations with unique indexes.
@@ -27,12 +30,14 @@ cp .env.example .env
 
 Fill in `.env` with the bot token, application ID, and MongoDB URI. Set `DISCORD_GUILD_ID` to a test server for immediate command registration; omit it when deploying global commands. Global command updates can take time to propagate. Remove old guild commands separately when switching to global registration to avoid duplicates. Never commit `.env` or tokens.
 
-Enable **Server Members Intent** in the Developer Portal. Message Content Intent is not needed: spam protection counts messages without reading their contents.
+Enable **Server Members Intent** in the Developer Portal. Basic spam protection does not need Message Content Intent. For content-based automod, enable **Message Content Intent** in the portal and set `MESSAGE_CONTENT_ENABLED=true` in `.env`, then restart. The gateway also requests Guild Moderation events for audit protection.
 
 Install the bot with the `bot` and `applications.commands` scopes. Grant these permissions where the corresponding features are used:
 
 - View Channels, Send Messages, Read Message History
 - Moderate Members, Kick Members, Ban Members, Manage Messages
+- View Audit Log for audit protection and audit event logging
+- Attach Files for captcha verification
 - Manage Channels and Manage Roles (for ticket permission overwrites)
 - Use External Emojis if configured emojis come from another accessible server
 
@@ -52,9 +57,10 @@ For development: `npm run dev`. Run exactly one Kuroo process for each bot token
 2. Run `/setup logs:#mod-logs ticket_category:Support staff:@Support`.
 3. Run `/security configure enabled:true` to opt into automatic moderation.
 4. Run `/ticket-panel` in a public support channel.
-5. Inspect `/security status` and test permissions in a staging server before wider use.
+5. Configure `/antinuke` in alert mode, `/automod`, and `/verification` as described in the [feature guide](docs/aerox-reference.md). All new automations start disabled. Re-run `npm run deploy` when updating commands.
+6. Inspect `/security status` and test permissions in a staging server before wider use.
 
-Default security settings: 8 joins within 15 seconds activates a 60 second surge window. Accounts younger than 24 hours joining from the threshold onward receive a 10 minute timeout. Every further qualifying join extends the surge window. Message flood protection times out a member at 6 messages within 5 seconds across channels. Earlier joins are not retrospectively timed out. Accounts older than the configured minimum are unaffected by join protection. Bot accounts, server managers, moderators, owners, and members the bot cannot moderate are exempt from automatic timeouts.
+Default security settings: 8 joins within 15 seconds activates a 60 second surge window. Accounts younger than 24 hours joining from the threshold onward receive the configured raid response (default: 10 minute timeout). Every further qualifying join extends the surge window. Message flood protection times out a member at 6 messages within 5 seconds across channels. Earlier joins are not retrospectively timed out. Accounts older than the configured minimum are unaffected by join protection. Server managers, moderators, owners, and members the bot cannot moderate are exempt from raid timeouts and automod; audit protection has its own stricter trust list. Bot accounts are exempt from spam timeouts. The optional raid bot filter can kick or ban untrusted bots; approve them with `/trust feature:raid`.
 
 The bot must have a functioning database to act; it records moderation intent before applying a timeout, kick, ban, or purge. Cases track `pending`, `succeeded`, and `failed`. A crash or database failure during a Discord action can leave a pending case; check Discord’s audit log before retrying. Log delivery failures are recorded on stderr without undoing an already completed action. Settings may take up to five seconds to refresh for automated protection.
 
@@ -75,6 +81,8 @@ The bot must have a functioning database to act; it records moderation intent be
 Ticket owners, configured staff, and members with Manage Channels can close tickets. Server administrators can access private channels through Discord’s permission model. Closing permanently deletes the channel; transcripts are not stored. Ticket channel overwrites are explicitly set and do not inherit category access. Messages support text by default; grant other ticket permissions deliberately.
 
 A crash during ticket creation can leave a `creating` reservation, or an open record whose channel was manually deleted. An administrator should inspect the channel and matching `tickets` database document before changing its status to `closed`; never release a reservation while its private channel still needs attention. Repost ticket panels with `/ticket-panel` if deleted. Buttons on existing panels survive restarts.
+
+For the expanded security, automod, verification, moderation, logging, and utility commands, see the [full feature guide](docs/aerox-reference.md). Channel operations need both Manage Channels and Manage Roles and preserve original @everyone settings for restoration.
 
 ## Custom emojis
 
@@ -105,6 +113,6 @@ npm audit --omit=dev
 
 Tests cover permission boundaries, emoji rendering, Components V2 payloads, command registration schemas, MongoDB indexes, concurrent ticket reservations, failed moderation persistence, and ticket cleanup. Database tests use an ephemeral real MongoDB process through `mongodb-memory-server` and may download its binary on first run. No Discord token is needed for tests. Live Discord gateway, permission behavior, and rendering still require a test server.
 
-Use a process supervisor for production and keep secrets in a secret manager or protected environment file. Back up MongoDB and restrict its network access. The bot logs only limited error metadata. It does not provide malicious administrator recovery, deleted channel restoration, anti-nuke guarantees, content-based automod, or distributed rate limiting. Discord timeouts cannot affect administrators or members above Kuroo. Tune thresholds to your community; legitimate bursts can trigger protection.
+Use a process supervisor for production and keep secrets in a secret manager or protected environment file. Back up MongoDB and restrict its network access. The bot logs only limited error metadata. Optional audit protection can contain untrusted administrators below Kuroo and perform partial restoration; see the recovery limits in the feature guide. It does not guarantee prevention of server destruction, restore deleted message history, classify image content itself, or coordinate rate limits across processes. Discord timeouts cannot affect administrators or members above Kuroo. Tune thresholds to your community; legitimate bursts can trigger protection.
 
 Changes to the ticket staff role or category apply to new tickets. Review existing channel overwrites when rotating staff access.

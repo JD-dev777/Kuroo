@@ -1,3 +1,7 @@
+import { configureFeature } from './feature-settings.js';
+import { configureVerification, handleVerification, verificationModal } from './verification.js';
+import { extraModeration, extraModerationPermissions, confirmBulkChannel } from './moderation-extra.js';
+import { utility } from './utilities.js';
 import { ChatInputCommandInteraction, Client, Events, Interaction, PermissionFlagsBits as P, ChannelType } from 'discord.js';
 import mongoose from 'mongoose';
 import { getSettings } from './models.js';
@@ -63,10 +67,10 @@ async function configure(interaction: ChatInputCommandInteraction) {
     await settings.save(); invalidateSecurityConfig(guild.id);
     await safeAudit(guild, 'Security configuration updated', `<@${actor.id}> set protection to **${enabled ? 'enabled' : 'disabled'}**.`);
   }
-  await interaction.editReply(privatePanel('{emoji:shield} Kuroo Security', `Protection: **${settings.securityEnabled ? 'Enabled' : 'Disabled'}**\nJoin surge: ${settings.joinLimit} joins / ${settings.joinWindowSeconds}s\nMinimum account age during a surge: ${settings.minAccountAgeHours}h\nSpam threshold: ${settings.spamLimit} messages / 5s\nAutomatic action: 10 minute timeout.\nServer managers and moderators are exempt. Requires Kuroo’s role above the target.`));
+  await interaction.editReply(privatePanel('{emoji:shield} Kuroo Security', `Protection: **${settings.securityEnabled ? 'Enabled' : 'Disabled'}**\nJoin surge: ${settings.joinLimit} joins / ${settings.joinWindowSeconds}s\nMinimum account age during a surge: ${settings.minAccountAgeHours}h\nSpam threshold: ${settings.spamLimit} messages / 5s\nRaid action: ${settings.raid?.action ?? 'timeout'} (10 minutes for timeout). Message floods: 10 minute timeout.\nServer managers and moderators are exempt. Requires Kuroo’s role above the target.`));
 }
 async function handle(interaction: Interaction) {
-  if (!interaction.isChatInputCommand() && !interaction.isButton()) return;
+  if (!interaction.isChatInputCommand() && !interaction.isButton() && !interaction.isModalSubmit()) return;
   if (!interaction.inGuild() || !interaction.guild) {
     await interaction.reply(privatePanel('{emoji:error} Server only', 'Use Kuroo inside a server.')); return;
   }
@@ -76,20 +80,31 @@ async function handle(interaction: Interaction) {
   }
   inFlight.add(key);
   try {
+    if (interaction.isButton() && interaction.customId.startsWith('verify:enter:')) { await verificationModal(interaction); return; }
     await interaction.deferReply({ flags: 64 });
     if (mongoose.connection.readyState !== 1) throw new UserError('The database is unavailable. Please try again later.');
+    if (interaction.isModalSubmit()) {
+      if (!/^verify:answer:[a-f0-9]{24}$/.test(interaction.customId)) throw new UserError('Unknown form.');
+      await handleVerification(interaction); return;
+    }
     if (interaction.isButton()) {
+      if (interaction.customId === 'verify:start') { await handleVerification(interaction); return; }
+      if (interaction.customId.startsWith('channel:confirm:')) { await confirmBulkChannel(interaction); return; }
       if (!/^ticket:(open|close|confirm:\d{17,20})$/.test(interaction.customId)) throw new UserError('Unknown control.');
       await handleTicket(interaction); return;
     }
     const command = interaction.commandName;
+    if (extraModerationPermissions[command]) { await extraModeration(interaction); return; }
+    if (['antinuke', 'extraowner', 'trust', 'antiraid', 'automod', 'autorole', 'logging'].includes(command)) { await configureFeature(interaction); return; }
+    if (command === 'verification') { await configureVerification(interaction); return; }
+    if (['stats', 'serverinfo', 'userinfo', 'avatar', 'banner', 'report'].includes(command)) { await utility(interaction); return; }
     if (moderationPermissions[command]) { await moderate(interaction); return; }
     if (['setup', 'security', 'ticket-panel'].includes(command)) { await configure(interaction); return; }
     if (command === 'ping') {
       await interaction.editReply(privatePanel('{emoji:success} Kuroo is online', `Gateway latency: ${Math.max(0, Math.round(interaction.client.ws.ping))}ms\nDatabase: connected`)); return;
     }
     if (command !== 'help') throw new UserError('Unknown command. Update command registration.');
-    await interaction.editReply(privatePanel('{emoji:shield} Kuroo', '**Moderation**\n`/ban` · `/kick` · `/timeout` · `/warn` · `/purge` · `/cases`\n\n**Security & setup**\n`/setup` · `/security configure` · `/security status`\n\n**Support**\n`/ticket-panel` — publish a private ticket launcher\n\n**Utilities**\n`/ping` · `/help`\n\nAll actions check your current permissions. Automated security must be enabled by a server manager.'));
+    await interaction.editReply(privatePanel('{emoji:shield} Kuroo', '**Moderation**\n`/ban` · `/unban` · `/kick` · `/timeout` · `/untimeout` · `/warn` · `/purge` · `/purgebots` · `/cases` · `/nickname` · `/role` · `/role-members` · `/channel`\n\n**Security & setup**\n`/setup` · `/security` · `/antinuke` · `/antiraid` · `/trust` · `/extraowner` · `/automod`\n\n**Community**\n`/verification` · `/autorole` · `/report` · `/ticket-panel` — publish a private ticket launcher\n\n**Utilities**\n`/ping` · `/stats` · `/serverinfo` · `/userinfo` · `/avatar` · `/banner` · `/help`\n\nAll actions check your current permissions. Automated security must be enabled by a server manager.'));
   } catch (error) {
     if (!(error instanceof UserError)) reportError('Interaction failed', error);
     const response = privatePanel('{emoji:error} Unable to complete action', error instanceof UserError ? error.message : 'The action could not be confirmed. Check permissions and moderation logs before retrying.');

@@ -38,7 +38,8 @@ test('Components V2 responses use a container, suppress mentions, and do not mix
   assert.ok(privatePanel('Private', 'Reply').flags & MessageFlags.Ephemeral);
 });
 test('all slash commands serialize as guild-only, with explicit permissions on privileged commands', () => {
-  const publicCommands = new Set(['help', 'ping']);
+  const publicCommands = new Set(['help', 'ping', 'stats', 'serverinfo', 'userinfo', 'avatar', 'banner', 'report']);
+  assert.equal(new Set(commands.map(command => command.name)).size, commands.length);
   for (const command of commands) {
     const json = command.toJSON();
     assert.deepEqual(json.contexts, [0]);

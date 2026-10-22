@@ -6,6 +6,7 @@ const schema = z.object({
   DISCORD_CLIENT_ID: z.string().regex(/^\d{17,20}$/),
   DISCORD_GUILD_ID: z.string().regex(/^\d{17,20}$/).optional(),
   MONGODB_URI: z.string().regex(/^mongodb(?:\+srv)?:\/\//),
+  MESSAGE_CONTENT_ENABLED: z.enum(['true', 'false']).default('false'),
   EMOJI_CONFIG_PATH: z.string().default('./config/emojis.json'),
 });
 export function readConfig() {

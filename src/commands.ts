@@ -1,9 +1,13 @@
+import { extraModerationCommands } from './moderation-commands.js';
+import { featureCommands } from './feature-commands.js';
 import { ChannelType, PermissionFlagsBits as P, SlashCommandBuilder } from 'discord.js';
 const moderation = (name: string, description: string, permission: bigint) => new SlashCommandBuilder().setName(name).setDescription(description)
   .setDefaultMemberPermissions(permission).setContexts(0)
   .addUserOption(o => o.setName('user').setDescription('Member to moderate').setRequired(true))
   .addStringOption(o => o.setName('reason').setDescription('Audit reason').setMaxLength(400).setRequired(true));
 export const commands = [
+  ...featureCommands,
+  ...extraModerationCommands,
   new SlashCommandBuilder().setName('help').setDescription('Kuroo commands and security information').setContexts(0),
   new SlashCommandBuilder().setName('ping').setDescription('Check Kuroo latency').setContexts(0),
   moderation('ban', 'Ban a member', P.BanMembers),
