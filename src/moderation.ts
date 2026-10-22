@@ -1,11 +1,12 @@
+import type { CommandContext } from './command-context.js';
 import { UserError } from './errors.js';
-import { ChatInputCommandInteraction, escapeMarkdown, PermissionFlagsBits as P } from 'discord.js';
+import { escapeMarkdown, PermissionFlagsBits as P } from 'discord.js';
 import { ModCase } from './models.js';
 import { canModerate } from './security-policy.js';
 import { privatePanel } from './ui.js';
 import { safeAudit } from './audit.js';
 export const moderationPermissions: Record<string, bigint> = { ban: P.BanMembers, kick: P.KickMembers, timeout: P.ModerateMembers, warn: P.ModerateMembers, purge: P.ManageMessages, cases: P.ModerateMembers };
-export async function moderate(interaction: ChatInputCommandInteraction) {
+export async function moderate(interaction: CommandContext) {
   const guild = interaction.guild!;
   const command = interaction.commandName;
   const actor = await guild.members.fetch(interaction.user.id);
@@ -14,7 +15,7 @@ export async function moderate(interaction: ChatInputCommandInteraction) {
   if (command === 'cases') {
     const user = interaction.options.getUser('user', true);
     const records = await ModCase.find({ guildId: guild.id, targetId: user.id }).sort({ createdAt: -1 }).limit(10).lean();
-    await interaction.editReply(privatePanel('Moderation history', records.length ? records.map(record => `**${record.action}** · ${record.outcome} · <@${record.actorId}>\n${escapeMarkdown(record.reason).slice(0, 160)}${record.reason.length > 80 ? '…' : ''}`).join('\n\n') : 'No records for this user.'));
+    await interaction.editReply(privatePanel('{emoji:history} Moderation history', records.length ? records.map(record => `**${record.action}** · ${record.outcome} · <@${record.actorId}>\n${escapeMarkdown(record.reason).slice(0, 160)}${record.reason.length > 80 ? '…' : ''}`).join('\n\n') : 'No records for this user.'));
     return;
   }
   const me = await guild.members.fetchMe();

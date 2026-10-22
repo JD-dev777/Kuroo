@@ -1,3 +1,4 @@
+import type { CommandContext } from './command-context.js';
 import { randomBytes } from 'node:crypto';
 import {
   ActionRowBuilder, AttachmentBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle, ChatInputCommandInteraction,
@@ -6,7 +7,7 @@ import {
 } from 'discord.js';
 import { Challenge, getSettings, Settings, VerificationGate } from './models.js';
 import { createCaptcha, captchaDigest } from './captcha.js';
-import { panel, privatePanel } from './ui.js';
+import { buttonEmoji, panel, privatePanel } from './ui.js';
 import { UserError } from './errors.js';
 import { safeAssignableRole } from './permissions.js';
 import { recordedAction } from './actions.js';
@@ -20,7 +21,7 @@ export async function assignJoinRole(member: GuildMember) {
   const me = await member.guild.members.fetchMe();
   await recordedAction(member.guild, me.id, member.id, 'autorole', `Assign role ${role.id}`, () => member.roles.add(role, 'Kuroo autorole'), `autorole:${member.id}:${member.joinedTimestamp}`);
 }
-export async function configureVerification(interaction: ChatInputCommandInteraction) {
+export async function configureVerification(interaction: CommandContext) {
   const guild = interaction.guild!;
   const actor = await guild.members.fetch(interaction.user.id);
   if (!actor.permissions.has([P.ManageGuild, P.ManageChannels, P.ManageRoles])) throw new UserError('Manage Server, Manage Channels, and Manage Roles permissions are required.');
@@ -38,7 +39,7 @@ export async function configureVerification(interaction: ChatInputCommandInterac
       if (!channel?.isSendable() || !channel.permissionsFor(guild.roles.everyone)?.has(P.ViewChannel) || !channel.permissionsFor(me)?.has([P.ViewChannel, P.SendMessages, P.AttachFiles])) throw new UserError('Choose a public text channel where Kuroo can send messages and attach files.');
       await Settings.updateOne({ guildId: guild.id }, { $set: { verification: { enabled: true, channelId: channel.id, roleId: role.id } } });
       try {
-        await channel.send(panel('{emoji:shield} Verify to join', 'Complete the image challenge to receive the verified role. If you need an accessible alternative, contact server staff.', [new ButtonBuilder().setCustomId('verify:start').setLabel('Verify').setStyle(ButtonStyle.Success)]));
+        await channel.send(panel('{emoji:shield} Verify to join', 'Complete the image challenge to receive the verified role. If you need an accessible alternative, contact server staff.', [new ButtonBuilder().setCustomId('verify:start').setLabel('Verify').setEmoji(buttonEmoji('verify')).setStyle(ButtonStyle.Success)]));
       } catch (error) {
         await Settings.updateOne({ guildId: guild.id }, { $set: { 'verification.enabled': false } });
         throw error;
@@ -114,7 +115,7 @@ export async function handleVerification(interaction: ButtonInteraction | ModalS
     const { answer, image } = createCaptcha();
     const nonce = randomBytes(12).toString('hex');
     await Challenge.findOneAndUpdate({ guildId: guild.id, userId: member.id }, { nonce, digest: captchaDigest(nonce, answer), expiresAt: new Date(Date.now() + 300_000) }, { upsert: true });
-    const payload = privatePanel('{emoji:shield} Verification challenge', 'Read the image, then select Enter code. This code expires in 5 minutes; each answer attempt consumes it.', [new ButtonBuilder().setCustomId(`verify:enter:${nonce}`).setLabel('Enter code').setStyle(ButtonStyle.Primary)]);
+    const payload = privatePanel('{emoji:shield} Verification challenge', 'Read the image, then select Enter code. This code expires in 5 minutes; each answer attempt consumes it.', [new ButtonBuilder().setCustomId(`verify:enter:${nonce}`).setLabel('Enter code').setEmoji(buttonEmoji('code')).setStyle(ButtonStyle.Primary)]);
     payload.components[0]!.addMediaGalleryComponents(new MediaGalleryBuilder().addItems(new MediaGalleryItemBuilder().setURL('attachment://captcha.png')));
     await interaction.editReply({ ...payload, files: [new AttachmentBuilder(image, { name: 'captcha.png' })] });
     return;

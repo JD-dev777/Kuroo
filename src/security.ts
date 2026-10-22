@@ -9,7 +9,7 @@ type Config = Awaited<ReturnType<typeof getSettings>>;
 const cached = new Map<string, { expires: number; value: Config }>();
 const pendingSettings = new Map<string, Promise<Config>>();
 export function invalidateSecurityConfig(guildId: string) { cached.delete(guildId); }
-async function settingsFor(guildId: string) {
+export async function settingsFor(guildId: string) {
   const found = cached.get(guildId);
   if (found && found.expires > Date.now()) return found.value;
   const pending = pendingSettings.get(guildId);

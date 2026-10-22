@@ -1,13 +1,14 @@
+import type { CommandContext } from './command-context.js';
 import { UserError } from './errors.js';
-import { ButtonBuilder, ButtonInteraction, ButtonStyle, ChannelType, ChatInputCommandInteraction, PermissionFlagsBits as P } from 'discord.js';
+import { ButtonBuilder, ButtonInteraction, ButtonStyle, ChannelType, PermissionFlagsBits as P } from 'discord.js';
 import { getSettings, Ticket } from './models.js';
-import { panel, privatePanel } from './ui.js';
+import { buttonEmoji, panel, privatePanel } from './ui.js';
 import { safeAudit } from './audit.js';
-export async function postTicketPanel(interaction: ChatInputCommandInteraction) {
+export async function postTicketPanel(interaction: CommandContext) {
   const settings = await getSettings(interaction.guildId!);
   if (!settings.staffRoleId || !settings.ticketCategoryId) throw new UserError('Configure a ticket category and staff role with /setup first.');
   if (!interaction.channel?.isSendable()) throw new UserError('This channel cannot receive a ticket panel.');
-  await interaction.channel.send(panel('{emoji:ticket} Kuroo Support', 'Need help? Open a private ticket for the server team.', [new ButtonBuilder().setCustomId('ticket:open').setLabel('Open ticket').setStyle(ButtonStyle.Primary)]));
+  await interaction.channel.send(panel('{emoji:ticket} Kuroo Support', 'Need help? Open a private ticket for the server team.', [new ButtonBuilder().setCustomId('ticket:open').setLabel('Open ticket').setEmoji(buttonEmoji('ticket')).setStyle(ButtonStyle.Primary)]));
   await interaction.editReply(privatePanel('{emoji:success} Ticket panel posted', 'Members can now open a private support channel.'));
 }
 export async function handleTicket(interaction: ButtonInteraction) {
@@ -44,7 +45,7 @@ export async function handleTicket(interaction: ButtonInteraction) {
       });
       ticket.channelId = channel.id;
       await ticket.save();
-      await channel.send(panel('{emoji:ticket} Private support', `Welcome <@${actor.id}>. Describe your issue for the server team.\nClosing deletes this channel; Kuroo does not save a transcript.`, [new ButtonBuilder().setCustomId('ticket:close').setLabel('Close ticket').setStyle(ButtonStyle.Danger)]));
+      await channel.send(panel('{emoji:ticket} Private support', `{emoji:wave} Welcome <@${actor.id}>. Describe your issue for the server team.\nClosing deletes this channel; Kuroo does not save a transcript.`, [new ButtonBuilder().setCustomId('ticket:close').setLabel('Close ticket').setEmoji(buttonEmoji('close')).setStyle(ButtonStyle.Danger)]));
       ticket.status = 'open'; await ticket.save();
     } catch (error) {
       // Release the unique reservation only after the private channel is gone.
@@ -60,7 +61,7 @@ export async function handleTicket(interaction: ButtonInteraction) {
   if (!ticket) throw new UserError('This channel is not an open Kuroo ticket.');
   if (actor.id !== ticket.ownerId && !actor.permissions.has(P.ManageChannels) && !(settings.staffRoleId && actor.roles.cache.has(settings.staffRoleId))) throw new UserError('Only the ticket owner or server team can close this ticket.');
   if (interaction.customId === 'ticket:close') {
-    await interaction.editReply(privatePanel('{emoji:warning} Delete this ticket?', 'This permanently deletes the channel and its messages. No transcript is saved.', [new ButtonBuilder().setCustomId(`ticket:confirm:${actor.id}`).setLabel('Delete ticket').setStyle(ButtonStyle.Danger)]));
+    await interaction.editReply(privatePanel('{emoji:warning} Delete this ticket?', 'This permanently deletes the channel and its messages. No transcript is saved.', [new ButtonBuilder().setCustomId(`ticket:confirm:${actor.id}`).setLabel('Delete ticket').setEmoji(buttonEmoji('delete')).setStyle(ButtonStyle.Danger)]));
     return;
   }
   if (interaction.customId !== `ticket:confirm:${actor.id}`) throw new UserError('This confirmation belongs to another member.');

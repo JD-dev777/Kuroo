@@ -2,6 +2,7 @@ import mongoose, { Schema } from 'mongoose';
 
 const settingsSchema = new Schema({
   guildId: { type: String, required: true, unique: true },
+  prefix: { type: String, default: '!', match: /^[a-zA-Z0-9!?.$%&*+=:;,_~-]{1,8}$/ },
   logChannelId: String,
   ticketCategoryId: String,
   staffRoleId: String,

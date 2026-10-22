@@ -1,4 +1,5 @@
-import { ChatInputCommandInteraction, escapeMarkdown, PermissionFlagsBits as P } from 'discord.js';
+import type { CommandContext } from './command-context.js';
+import { escapeMarkdown, PermissionFlagsBits as P } from 'discord.js';
 import { getSettings, ModCase, Settings } from './models.js';
 import { UserError } from './errors.js';
 import { privatePanel } from './ui.js';
@@ -8,7 +9,7 @@ import { safeAssignableRole } from './permissions.js';
 import { saveSnapshot } from './antinuke.js';
 
 const fields = { words: 'words', abuse: 'abuseWords', 'explicit-words': 'explicitWords' } as const;
-export async function configureFeature(interaction: ChatInputCommandInteraction) {
+export async function configureFeature(interaction: CommandContext) {
   const guild = interaction.guild!;
   const actor = await guild.members.fetch(interaction.user.id);
   if (!actor.permissions.has(P.ManageGuild)) throw new UserError('Manage Server permission is required.');
@@ -29,7 +30,7 @@ export async function configureFeature(interaction: ChatInputCommandInteraction)
       await Settings.updateOne({ guildId: guild.id }, op === 'add' ? { $addToSet: { extraOwners: user.id } } : { $pull: { extraOwners: user.id } });
     }
     const current = await getSettings(guild.id);
-    await interaction.editReply(privatePanel('Delegated security owners', current.extraOwners.map(id => `<@${id}>`).join('\n') || 'None.'));
+    await interaction.editReply(privatePanel('{emoji:owner} Delegated security owners', current.extraOwners.map(id => `<@${id}>`).join('\n') || 'None.'));
   } else if (name === 'trust') {
     const feature = interaction.options.getString('feature', true);
     const op = interaction.options.getString('operation', true);
@@ -50,7 +51,7 @@ export async function configureFeature(interaction: ChatInputCommandInteraction)
     }
     const current = await getSettings(guild.id);
     const ids = current.get(field) as string[];
-    await interaction.editReply(privatePanel('Security exceptions', `Feature: **${feature}** · Type: **${kind}**\n${ids.map(id => `\`${id}\``).join('\n') || 'None.'}`));
+    await interaction.editReply(privatePanel('{emoji:trust} Security exceptions', `Feature: **${feature}** · Type: **${kind}**\n${ids.map(id => `\`${id}\``).join('\n') || 'None.'}`));
   } else if (name === 'antinuke') {
     if (interaction.options.getSubcommand() === 'configure') {
       const enabled = interaction.options.getBoolean('enabled', true);
@@ -100,7 +101,7 @@ export async function configureFeature(interaction: ChatInputCommandInteraction)
       settings.logChannelId = undefined;
     }
     await settings.save();
-    await interaction.editReply(privatePanel('Moderation logging', enabled ? `Logs will be delivered to <#${settings.logChannelId}>.` : 'Moderation logging disabled.'));
+    await interaction.editReply(privatePanel('{emoji:logging} Moderation logging', enabled ? `Logs will be delivered to <#${settings.logChannelId}>.` : 'Moderation logging disabled.'));
   } else if (name === 'autorole') {
     const enabled = interaction.options.getBoolean('enabled', true);
     const role = interaction.options.getRole('role');
@@ -110,7 +111,7 @@ export async function configureFeature(interaction: ChatInputCommandInteraction)
       settings.autoroleId = role.id;
     } else settings.autoroleId = undefined;
     await settings.save();
-    await interaction.editReply(privatePanel('Automatic role', enabled ? `New members receive <@&${role!.id}> after joining, or after verification when enabled.` : 'Automatic role assignment disabled.'));
+    await interaction.editReply(privatePanel('{emoji:role} Automatic role', enabled ? `New members receive <@&${role!.id}> after joining, or after verification when enabled.` : 'Automatic role assignment disabled.'));
   } else {
     const am = settings.automod!;
     const sub = interaction.options.getSubcommand();
@@ -147,12 +148,12 @@ export async function configureFeature(interaction: ChatInputCommandInteraction)
         else am[field] = am[field].filter(value => value !== word);
         await settings.save();
       }
-      await interaction.editReply(privatePanel('Word filter', am[field].map(value => escapeMarkdown(value)).join(', ').slice(0, 3000) || 'Empty. Add your server’s own terms, then enable the matching rule.'));
+      await interaction.editReply(privatePanel('{emoji:filter} Word filter', am[field].map(value => escapeMarkdown(value)).join(', ').slice(0, 3000) || 'Empty. Add your server’s own terms, then enable the matching rule.'));
       return;
     } else if (sub === 'history') {
       const user = interaction.options.getUser('user', true);
       const cases = await ModCase.find({ guildId: guild.id, targetId: user.id, action: /^automod-/ }).sort({ createdAt: -1 }).limit(10);
-      await interaction.editReply(privatePanel('Automod history', cases.map(item => `**${item.action}** · ${item.outcome}\n${escapeMarkdown(item.reason).slice(0, 160)}`).join('\n\n') || 'No recorded violations.'));
+      await interaction.editReply(privatePanel('{emoji:history} Automod history', cases.map(item => `**${item.action}** · ${item.outcome}\n${escapeMarkdown(item.reason).slice(0, 160)}`).join('\n\n') || 'No recorded violations.'));
       return;
     }
     if (sub !== 'status') await settings.save();

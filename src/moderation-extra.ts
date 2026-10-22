@@ -1,12 +1,13 @@
+import type { CommandContext } from './command-context.js';
 import {
-  ButtonBuilder, ButtonInteraction, ButtonStyle, ChannelType, ChatInputCommandInteraction, Guild,
+  ButtonBuilder, ButtonInteraction, ButtonStyle, ChannelType, Guild,
   GuildMember, PermissionFlagsBits as P, Role,
 } from 'discord.js';
 import { UserError } from './errors.js';
 import { canModerate } from './security-policy.js';
 import { recordedAction } from './actions.js';
 import { ChannelState } from './models.js';
-import { privatePanel } from './ui.js';
+import { buttonEmoji, privatePanel } from './ui.js';
 export const extraModerationPermissions: Record<string, bigint> = {
   unban: P.BanMembers, untimeout: P.ModerateMembers, nickname: P.ManageNicknames, role: P.ManageRoles,
   channel: P.ManageChannels, purgebots: P.ManageMessages, 'role-members': P.ManageRoles,
@@ -20,7 +21,7 @@ function checkRole(actor: GuildMember, me: GuildMember, role: Role, grant: boole
   if (role.managed || role.id === role.guild.id || me.roles.highest.comparePositionTo(role) <= 0 || actor.id !== role.guild.ownerId && actor.roles.highest.comparePositionTo(role) <= 0) throw new UserError('Choose an unmanaged role below both you and Kuroo.');
   if (grant && !actor.permissions.has(role.permissions)) throw new UserError('You cannot grant permissions you do not have.');
 }
-async function channelMutation(interaction: ChatInputCommandInteraction | ButtonInteraction, operation: string, channelId: string, reason: string) {
+async function channelMutation(interaction: CommandContext | ButtonInteraction, operation: string, channelId: string, reason: string) {
   const guild = interaction.guild!;
   const [actor, me, channel] = await Promise.all([guild.members.fetch(interaction.user.id), guild.members.fetchMe(), guild.channels.fetch(channelId)]);
   if (!actor.permissions.has(P.ManageChannels) || !channel || channel.isThread() || !('permissionOverwrites' in channel) || !channel.permissionsFor(actor)?.has([P.ManageChannels, P.ManageRoles]) || !channel.permissionsFor(me)?.has([P.ViewChannel, P.ManageChannels, P.ManageRoles])) throw new UserError('Both you and Kuroo need Manage Channels and Manage Roles in the target channel.');
@@ -61,9 +62,9 @@ export async function confirmBulkChannel(interaction: ButtonInteraction) {
     try { await channelMutation(interaction, operation!, channel.id, `Kuroo bulk ${operation} by ${actor.id}`); completed++; }
     catch (error) { if (error instanceof UserError) skipped++; else throw error; }
   }
-  await interaction.editReply(privatePanel('Channel operation complete', `Updated ${completed} text channels. Skipped ${skipped} channels already in that state or without permission/saved state. Review explicit role and member overrides in Discord.`));
+  await interaction.editReply(privatePanel('{emoji:channel} Channel operation complete', `Updated ${completed} text channels. Skipped ${skipped} channels already in that state or without permission/saved state. Review explicit role and member overrides in Discord.`));
 }
-export async function extraModeration(interaction: ChatInputCommandInteraction) {
+export async function extraModeration(interaction: CommandContext) {
   const guild = interaction.guild!;
   const name = interaction.commandName;
   const [actor, me] = await Promise.all([guild.members.fetch(interaction.user.id), guild.members.fetchMe()]);
@@ -72,7 +73,7 @@ export async function extraModeration(interaction: ChatInputCommandInteraction) 
   if (name === 'channel') {
     const operation = interaction.options.getString('operation', true);
     if (interaction.options.getBoolean('all')) {
-      await interaction.editReply(privatePanel('{emoji:warning} Apply to all text channels?', `Operation: **${operation}**. Explicit role/member overrides can still grant access. Only settings previously changed by Kuroo can be restored.`, [new ButtonBuilder().setCustomId(`channel:confirm:${actor.id}:${operation}:${Date.now()}`).setLabel('Confirm server-wide change').setStyle(ButtonStyle.Danger)]));
+      await interaction.editReply(privatePanel('{emoji:warning} Apply to all text channels?', `Operation: **${operation}**. Explicit role/member overrides can still grant access. Only settings previously changed by Kuroo can be restored.`, [new ButtonBuilder().setCustomId(`channel:confirm:${actor.id}:${operation}:${Date.now()}`).setLabel('Confirm server-wide change').setEmoji(buttonEmoji('confirm')).setStyle(ButtonStyle.Danger)]));
       return;
     }
     await channelMutation(interaction, operation, interaction.options.getChannel('channel')?.id ?? interaction.channelId, `Kuroo ${operation} by ${actor.id}`);
@@ -89,7 +90,7 @@ export async function extraModeration(interaction: ChatInputCommandInteraction) 
     if (!role) throw new UserError('Role not found.');
     await guild.members.fetch();
     const ids = role.members.map(member => `<@${member.id}>`);
-    await interaction.editReply(privatePanel('Role members', `${ids.slice(0, 80).join('\n') || 'No members.'}\nTotal: ${ids.length}${ids.length > 80 ? ' (first 80 shown)' : ''}`));
+    await interaction.editReply(privatePanel('{emoji:role} Role members', `${ids.slice(0, 80).join('\n') || 'No members.'}\nTotal: ${ids.length}${ids.length > 80 ? ' (first 80 shown)' : ''}`));
     return;
   } else if (name === 'purgebots') {
     const channel = interaction.channel;
@@ -98,7 +99,7 @@ export async function extraModeration(interaction: ChatInputCommandInteraction) 
     const bots = messages.filter(message => message.author.bot);
     let deleted = 0;
     await recordedAction(guild, actor.id, channel.id, name, reason, async () => { deleted = (await channel.bulkDelete(bots, true)).size; });
-    await interaction.editReply(privatePanel('Bot messages removed', `Deleted ${deleted} bot messages younger than 14 days.`));
+    await interaction.editReply(privatePanel('{emoji:delete} Bot messages removed', `Deleted ${deleted} bot messages younger than 14 days.`));
     return;
   } else {
     const user = interaction.options.getUser('user', true);
